@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition - Real-time</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 Face Recognition</h1>
+            <a href="/" class="btn-back">← Back to Home</a>
+        </header>
+
+        <div class="recognition-container">
+            <div class="video-section">
+                <div class="video-container recognition-video">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas" style="display: none;"></canvas>
+                    <div id="overlay" class="overlay"></div>
+                </div>
+
+                <div class="controls">
+                    <button id="startBtn" class="btn btn-success">▶ Start Recognition</button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>⏸ Stop Recognition</button>
+                </div>
+
+                <div class="settings">
+                    <div class="setting-item">
+                        <label for="threshold">Recognition Threshold: <span id="thresholdValue">0.40</span></label>
+                        <input type="range" id="threshold" min="0.2" max="0.7" step="0.05" value="0.40">
+                        <small>Lower = Stricter, Higher = More Lenient</small>
+                    </div>
+                    <div class="setting-item">
+                        <label for="interval">Recognition Interval: <span id="intervalValue">1000</span>ms</label>
+                        <input type="range" id="interval" min="500" max="3000" step="100" value="1000">
+                    </div>
+                </div>
+
+                <div id="result" class="result-box"></div>
+            </div>
+
+            <div class="sidebar">
+                <div class="students-panel">
+                    <h3>📚 Enrolled Students (<span id="studentCount">{{ num_students }}</span>)</h3>
+                    <button id="refreshStudents" class="btn btn-secondary btn-sm">🔄 Refresh</button>
+                    <div id="studentsList" class="students-list">
+                        <!-- Students will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="info-panel">
+                    <h3>ℹ️ Status</h3>
+                    <div class="status-item">
+                        <span class="status-label">Recognition:</span>
+                        <span id="recognitionStatus" class="status-value">Stopped</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Last Result:</span>
+                        <span id="lastResult" class="status-value">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">FPS:</span>
+                        <span id="fps" class="status-value">0</span>
+                    </div>
+                </div>
+
+                <div class="tips">
+                    <h4>💡 Tips</h4>
+                    <ul>
+                        <li>Ensure good lighting</li>
+                        <li>Face the camera directly</li>
+                        <li>Only one person in frame</li>
+                        <li>Remove glasses if needed</li>
+                        <li>Stay within frame boundaries</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const resultDiv = document.getElementById('result');
+        const thresholdInput = document.getElementById('threshold');
+        const thresholdValue = document.getElementById('thresholdValue');
+        const intervalInput = document.getElementById('interval');
+        const intervalValue = document.getElementById('intervalValue');
+        const studentsListDiv = document.getElementById('studentsList');
+        const studentCountSpan = document.getElementById('studentCount');
+        const recognitionStatusSpan = document.getElementById('recognitionStatus');
+        const lastResultSpan = document.getElementById('lastResult');
+        const fpsSpan = document.getElementById('fps');
+        const refreshStudentsBtn = document.getElementById('refreshStudents');
+
+        let recognitionInterval = null;
+        let threshold = 0.40;
+        let interval = 1000;
+        let lastFrameTime = Date.now();
+        let frameCount = 0;
+
+        // Start video stream
+        navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                showResult('Error accessing camera: ' + err.message, 'error');
+            });
+
+        // Threshold slider
+        thresholdInput.addEventListener('input', (e) => {
+            threshold = parseFloat(e.target.value);
+            thresholdValue.textContent = threshold.toFixed(2);
+        });
+
+        // Interval slider
+        intervalInput.addEventListener('input', (e) => {
+            interval = parseInt(e.target.value);
+            intervalValue.textContent = interval;
+            
+            if (recognitionInterval) {
+                stopRecognition();
+                startRecognition();
+            }
+        });
+
+        // Start recognition
+        startBtn.addEventListener('click', startRecognition);
+        
+        function startRecognition() {
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            recognitionStatusSpan.textContent = 'Running';
+            recognitionStatusSpan.className = 'status-value status-running';
+            
+            recognitionInterval = setInterval(recognizeFrame, interval);
+        }
+
+        // Stop recognition
+        stopBtn.addEventListener('click', stopRecognition);
+        
+        function stopRecognition() {
+            if (recognitionInterval) {
+                clearInterval(recognitionInterval);
+                recognitionInterval = null;
+            }
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            recognitionStatusSpan.textContent = 'Stopped';
+            recognitionStatusSpan.className = 'status-value status-stopped';
+            overlay.innerHTML = '';
+        }
+
+        // Recognize frame
+        async function recognizeFrame() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            // Update FPS
+            frameCount++;
+            const now = Date.now();
+            if (now - lastFrameTime >= 1000) {
+                fpsSpan.textContent = frameCount.toFixed(1);
+                frameCount = 0;
+                lastFrameTime = now;
+            }
+
+            try {
+                const response = await fetch('/api/recognize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData, threshold: threshold })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    handleRecognitionResult(result);
+                } else {
+                    showResult('Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showResult('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Handle recognition result
+        function handleRecognitionResult(result) {
+            switch (result.status) {
+                case 'VERIFIED':
+                    showResult(`✅ ${result.student_id} (${(result.similarity * 100).toFixed(1)}%)`, 'success');
+                    lastResultSpan.textContent = result.student_id;
+                    lastResultSpan.className = 'status-value status-verified';
+                    overlay.innerHTML = '<div class="status-badge verified">✓ VERIFIED</div>';
+                    break;
+                    
+                case 'UNKNOWN':
+                    showResult(`❌ Unknown Person (${(result.similarity * 100).toFixed(1)}%)`, 'warning');
+                    lastResultSpan.textContent = 'Unknown';
+                    lastResultSpan.className = 'status-value status-unknown';
+                    overlay.innerHTML = '<div class="status-badge unknown">? UNKNOWN</div>';
+                    break;
+                    
+                case 'NO_FACE':
+                    showResult('⚠️ No face detected', 'info');
+                    lastResultSpan.textContent = 'No face';
+                    lastResultSpan.className = 'status-value status-info';
+                    overlay.innerHTML = '<div class="status-badge info">NO FACE</div>';
+                    break;
+                    
+                case 'MULTIPLE_FACES':
+                    showResult(`⚠️ Multiple faces detected (${result.count})`, 'warning');
+                    lastResultSpan.textContent = 'Multiple faces';
+                    lastResultSpan.className = 'status-value status-warning';
+                    overlay.innerHTML = '<div class="status-badge warning">⚠ MULTIPLE FACES</div>';
+                    break;
+            }
+        }
+
+        // Show result
+        function showResult(text, type) {
+            resultDiv.textContent = text;
+            resultDiv.className = 'result-box ' + type;
+        }
+
+        // Load students
+        async function loadStudents() {
+            try {
+                const response = await fetch('/api/students');
+                const result = await response.json();
+
+                if (result.success) {
+                    studentCountSpan.textContent = result.count;
+                    studentsListDiv.innerHTML = '';
+
+                    if (result.students.length === 0) {
+                        studentsListDiv.innerHTML = '<p class="no-students">No students enrolled yet</p>';
+                    } else {
+                        result.students.forEach(studentId => {
+                            const item = document.createElement('div');
+                            item.className = 'student-item';
+                            item.innerHTML = `
+                                <span class="student-id">${studentId}</span>
+                                <button class="btn-delete" onclick="deleteStudent('${studentId}')">🗑️</button>
+                            `;
+                            studentsListDiv.appendChild(item);
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading students:', error);
+            }
+        }
+
+        // Delete student
+        async function deleteStudent(studentId) {
+            if (!confirm(`Are you sure you want to delete ${studentId}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/delete_student/${studentId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    loadStudents();
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Refresh students
+        refreshStudentsBtn.addEventListener('click', loadStudents);
+
+        // Load students on page load
+        loadStudents();
+    </script>
+</body>
+</html>

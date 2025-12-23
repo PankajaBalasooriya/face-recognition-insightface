@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎓 Face Recognition System</h1>
+            <p class="subtitle">Advanced Face Recognition using InsightFace</p>
+        </header>
+
+        <div class="stats-box">
+            <div class="stat-item">
+                <span class="stat-number">{{ num_students }}</span>
+                <span class="stat-label">Enrolled Students</span>
+            </div>
+        </div>
+
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">👤</div>
+                <h2>Enroll Student</h2>
+                <p>Register a new student by capturing their face image</p>
+                <a href="/enroll" class="btn btn-primary">Start Enrollment</a>
+            </div>
+
+            <div class="card">
+                <div class="card-icon">🔍</div>
+                <h2>Recognize Face</h2>
+                <p>Identify enrolled students through face recognition</p>
+                <a href="/recognize" class="btn btn-success">Start Recognition</a>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <h3>ℹ️ How to Use</h3>
+            <ol>
+                <li><strong>Enroll Students:</strong> Click "Start Enrollment" to register new students. Enter their ID and capture face images.</li>
+                <li><strong>Recognize Faces:</strong> Click "Start Recognition" to identify enrolled students in real-time.</li>
+                <li><strong>Manage Students:</strong> View and manage enrolled students from the recognition page.</li>
+            </ol>
+        </div>
+
+        <footer>
+            <p>Powered by InsightFace • Flask • OpenCV</p>
+        </footer>
+    </div>
+</body>
+</html>

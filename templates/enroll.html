@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enroll Student - Face Recognition</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>👤 Student Enrollment</h1>
+            <a href="/" class="btn-back">← Back to Home</a>
+        </header>
+
+        <div class="enrollment-container">
+            <div class="input-section">
+                <div class="form-group">
+                    <label for="studentId">Student ID:</label>
+                    <input type="text" id="studentId" placeholder="Enter student ID (e.g., STU001)" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Enrollment Mode:</label>
+                    <div class="mode-toggle">
+                        <button id="singleMode" class="mode-btn active">Single Shot</button>
+                        <button id="multipleMode" class="mode-btn">Multiple Samples (5)</button>
+                    </div>
+                </div>
+
+                <div class="video-container">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas" style="display: none;"></canvas>
+                </div>
+
+                <div id="capturedSamples" class="samples-container" style="display: none;">
+                    <h3>Captured Samples: <span id="sampleCount">0</span>/5</h3>
+                    <div id="sampleThumbnails" class="thumbnails"></div>
+                </div>
+
+                <div class="button-group">
+                    <button id="captureBtn" class="btn btn-primary">📸 Capture Face</button>
+                    <button id="enrollBtn" class="btn btn-success" disabled>✓ Enroll Student</button>
+                    <button id="resetBtn" class="btn btn-secondary">🔄 Reset</button>
+                </div>
+
+                <div id="message" class="message"></div>
+            </div>
+
+            <div class="instructions">
+                <h3>📋 Instructions</h3>
+                <ul>
+                    <li><strong>Enter Student ID:</strong> Provide a unique identifier for the student</li>
+                    <li><strong>Choose Mode:</strong>
+                        <ul>
+                            <li><strong>Single Shot:</strong> Quick enrollment with one image</li>
+                            <li><strong>Multiple Samples:</strong> Better accuracy with 5 images</li>
+                        </ul>
+                    </li>
+                    <li><strong>Position Face:</strong> Ensure face is clearly visible and well-lit</li>
+                    <li><strong>Capture:</strong> Click "Capture Face" when ready</li>
+                    <li><strong>For Multiple Samples:</strong> Vary angles slightly (front, left, right)</li>
+                    <li><strong>Enroll:</strong> Click "Enroll Student" to save</li>
+                </ul>
+
+                <div class="tips">
+                    <h4>💡 Tips for Best Results</h4>
+                    <ul>
+                        <li>Good lighting on the face</li>
+                        <li>Remove glasses if possible</li>
+                        <li>Look directly at camera</li>
+                        <li>Neutral facial expression</li>
+                        <li>No other people in frame</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const studentIdInput = document.getElementById('studentId');
+        const captureBtn = document.getElementById('captureBtn');
+        const enrollBtn = document.getElementById('enrollBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const messageDiv = document.getElementById('message');
+        const singleModeBtn = document.getElementById('singleMode');
+        const multipleModeBtn = document.getElementById('multipleMode');
+        const capturedSamplesDiv = document.getElementById('capturedSamples');
+        const sampleCountSpan = document.getElementById('sampleCount');
+        const sampleThumbnailsDiv = document.getElementById('sampleThumbnails');
+
+        let capturedImages = [];
+        let isMultipleMode = false;
+        const maxSamples = 5;
+
+        // Start video stream
+        navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                showMessage('Error accessing camera: ' + err.message, 'error');
+            });
+
+        // Mode toggle
+        singleModeBtn.addEventListener('click', () => {
+            isMultipleMode = false;
+            singleModeBtn.classList.add('active');
+            multipleModeBtn.classList.remove('active');
+            resetCapture();
+        });
+
+        multipleModeBtn.addEventListener('click', () => {
+            isMultipleMode = true;
+            multipleModeBtn.classList.add('active');
+            singleModeBtn.classList.remove('active');
+            capturedSamplesDiv.style.display = 'block';
+            resetCapture();
+        });
+
+        // Capture image
+        captureBtn.addEventListener('click', () => {
+            if (!studentIdInput.value.trim()) {
+                showMessage('Please enter a student ID first', 'error');
+                return;
+            }
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            if (isMultipleMode) {
+                if (capturedImages.length < maxSamples) {
+                    capturedImages.push(imageData);
+                    updateSampleDisplay();
+                    
+                    if (capturedImages.length === maxSamples) {
+                        captureBtn.disabled = true;
+                        enrollBtn.disabled = false;
+                        showMessage(`All ${maxSamples} samples captured! Click "Enroll Student" to save.`, 'success');
+                    } else {
+                        showMessage(`Sample ${capturedImages.length}/${maxSamples} captured`, 'success');
+                    }
+                }
+            } else {
+                capturedImages = [imageData];
+                captureBtn.disabled = true;
+                enrollBtn.disabled = false;
+                showMessage('Face captured! Click "Enroll Student" to save.', 'success');
+            }
+        });
+
+        // Update sample display
+        function updateSampleDisplay() {
+            sampleCountSpan.textContent = capturedImages.length;
+            sampleThumbnailsDiv.innerHTML = '';
+            
+            capturedImages.forEach((img, idx) => {
+                const thumb = document.createElement('div');
+                thumb.className = 'thumbnail';
+                thumb.innerHTML = `
+                    <img src="${img}" alt="Sample ${idx + 1}">
+                    <span>${idx + 1}</span>
+                `;
+                sampleThumbnailsDiv.appendChild(thumb);
+            });
+        }
+
+        // Enroll student
+        enrollBtn.addEventListener('click', async () => {
+            const studentId = studentIdInput.value.trim();
+            
+            if (!studentId) {
+                showMessage('Please enter a student ID', 'error');
+                return;
+            }
+
+            if (capturedImages.length === 0) {
+                showMessage('Please capture face image(s) first', 'error');
+                return;
+            }
+
+            enrollBtn.disabled = true;
+            showMessage('Enrolling student...', 'info');
+
+            try {
+                const endpoint = isMultipleMode ? '/api/enroll_multiple' : '/api/enroll';
+                const payload = isMultipleMode 
+                    ? { student_id: studentId, images: capturedImages }
+                    : { student_id: studentId, image: capturedImages[0] };
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showMessage(result.message, 'success');
+                    setTimeout(() => {
+                        resetCapture();
+                        studentIdInput.value = '';
+                    }, 2000);
+                } else {
+                    showMessage('Error: ' + result.error, 'error');
+                    enrollBtn.disabled = false;
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+                enrollBtn.disabled = false;
+            }
+        });
+
+        // Reset capture
+        resetBtn.addEventListener('click', resetCapture);
+
+        function resetCapture() {
+            capturedImages = [];
+            captureBtn.disabled = false;
+            enrollBtn.disabled = true;
+            messageDiv.textContent = '';
+            messageDiv.className = 'message';
+            sampleThumbnailsDiv.innerHTML = '';
+            sampleCountSpan.textContent = '0';
+            
+            if (!isMultipleMode) {
+                capturedSamplesDiv.style.display = 'none';
+            }
+        }
+
+        // Show message
+        function showMessage(text, type) {
+            messageDiv.textContent = text;
+            messageDiv.className = 'message ' + type;
+        }
+    </script>
+</body>
+</html>
