@@ -1,4 +1,8 @@
 insightface==0.7.3
 opencv-python==4.8.1.78
 numpy==1.24.3
-onnxruntime==1.16.0
+# onnxruntime==1.16.0
+
+# For GPU acceleration (optional - uncomment if you have NVIDIA GPU with CUDA):
+onnxruntime-gpu==1.16.0
+# Note: Remove or comment out 'onnxruntime' above if installing onnxruntime-gpu

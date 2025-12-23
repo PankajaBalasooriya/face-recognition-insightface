@@ -37,11 +37,22 @@ class FaceRecognitionProctor:
         self.threshold = threshold
         
         print("Initializing InsightFace model...")
+        
+        # Configure providers based on device
+        if device == 'cuda':
+            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            ctx_id = 0
+            print("🚀 Using GPU acceleration (CUDA)")
+        else:
+            providers = ['CPUExecutionProvider']
+            ctx_id = -1
+            print("⚙️  Using CPU processing")
+        
         self.app = FaceAnalysis(
             name='buffalo_l',
-            providers=['CPUExecutionProvider'] if device == 'cpu' else ['CUDAExecutionProvider']
+            providers=providers
         )
-        self.app.prepare(ctx_id=0 if device == 'cuda' else -1, det_size=(640, 640))
+        self.app.prepare(ctx_id=ctx_id, det_size=(640, 640))
         print("✓ Model loaded successfully")
         
         # Load enrolled students
@@ -289,16 +300,22 @@ def main():
             print("✗ Invalid input. Using default threshold.")
             threshold = DEFAULT_THRESHOLD
     
-    # Check for GPU
+    # Check for GPU availability
     try:
-        import torch
-        if torch.cuda.is_available():
-            use_gpu = input("\nGPU detected. Use GPU acceleration? (y/n): ").strip().lower()
+        import onnxruntime as ort
+        available_providers = ort.get_available_providers()
+        
+        if 'CUDAExecutionProvider' in available_providers:
+            print("\n✓ GPU (CUDA) detected!")
+            use_gpu = input("Use GPU acceleration? (y/n): ").strip().lower()
             if use_gpu == 'y':
                 device = 'cuda'
-                print("✓ Using GPU acceleration")
+                print("🚀 GPU acceleration enabled")
+        else:
+            print("\nℹ️  GPU not available. Using CPU.")
+            print("   To enable GPU: pip install onnxruntime-gpu")
     except ImportError:
-        pass
+        print("\nℹ️  Using CPU processing")
     
     # Initialize and run
     proctor = FaceRecognitionProctor(threshold=threshold, device=device)

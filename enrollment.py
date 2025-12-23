@@ -30,11 +30,22 @@ class StudentEnrollment:
         self.num_samples = num_samples
         
         print("Initializing InsightFace model...")
+        
+        # Configure providers based on device
+        if device == 'cuda':
+            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            ctx_id = 0
+            print("🚀 Using GPU acceleration (CUDA)")
+        else:
+            providers = ['CPUExecutionProvider']
+            ctx_id = -1
+            print("⚙️  Using CPU processing")
+        
         self.app = FaceAnalysis(
             name='buffalo_l',  # High-accuracy model
-            providers=['CPUExecutionProvider'] if device == 'cpu' else ['CUDAExecutionProvider']
+            providers=providers
         )
-        self.app.prepare(ctx_id=0 if device == 'cuda' else -1, det_size=(640, 640))
+        self.app.prepare(ctx_id=ctx_id, det_size=(640, 640))
         print("✓ Model loaded successfully")
         
         # Load existing embeddings
