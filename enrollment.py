@@ -1,12 +1,15 @@
 """
 Student Enrollment Module
-Captures multiple face images, extracts embeddings, and stores averaged embeddings.
+Supports two enrollment modes:
+1. Live capture: Multiple samples from webcam (more robust)
+2. Photo upload: Single portrait photo (faster, more practical)
 """
 
 import cv2
 import numpy as np
 from insightface.app import FaceAnalysis
 import time
+import os
 from utils import (
     save_embeddings, 
     load_embeddings, 
@@ -35,21 +38,108 @@ class StudentEnrollment:
         if device == 'cuda':
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
             ctx_id = 0
-            print("Using GPU acceleration (CUDA)")
+            print("🚀 Using GPU acceleration (CUDA)")
         else:
             providers = ['CPUExecutionProvider']
             ctx_id = -1
-            print("Using CPU processing")
+            print("⚙️  Using CPU processing")
         
         self.app = FaceAnalysis(
             name='buffalo_l',  # High-accuracy model
             providers=providers
         )
         self.app.prepare(ctx_id=ctx_id, det_size=(640, 640))
-        print("Model loaded successfully")
+        
+        # Set detection threshold for better face detection
+        for model in self.app.models.values():
+            if hasattr(model, 'det_thresh'):
+                model.det_thresh = 0.3
+        
+        print("✓ Model loaded successfully")
         
         # Load existing embeddings
         self.embeddings_db = load_embeddings(EMBEDDINGS_FILE)
+    
+    def enroll_from_photo(self, student_id: str, photo_path: str) -> bool:
+        """
+        Enroll a student from a single portrait photo.
+        
+        Args:
+            student_id: Unique identifier for the student
+            photo_path: Path to the portrait photo
+        
+        Returns:
+            True if enrollment successful, False otherwise
+        """
+        print(f"\n{'='*60}")
+        print(f"ENROLLING STUDENT FROM PHOTO: {student_id}")
+        print(f"{'='*60}")
+        print(f"Photo: {photo_path}\n")
+        
+        # Check if file exists
+        if not os.path.exists(photo_path):
+            print(f"✗ Error: Photo file not found at {photo_path}")
+            return False
+        
+        # Read the image
+        frame = cv2.imread(photo_path)
+        if frame is None:
+            print(f"✗ Error: Could not read image file")
+            return False
+        
+        print(f"✓ Image loaded: {frame.shape[1]}x{frame.shape[0]} pixels")
+        
+        # Detect faces
+        faces = self.app.get(frame, max_num=10)
+        
+        if len(faces) == 0:
+            print("✗ Error: No face detected in the photo")
+            print("  Tips: Ensure the photo has good lighting and a clear frontal face")
+            return False
+        
+        if len(faces) > 1:
+            print(f"⚠ Warning: Multiple faces detected ({len(faces)} faces)")
+            print("  Using the largest face (assumed to be the primary subject)")
+            
+            # Find the largest face (by bounding box area)
+            largest_face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+            faces = [largest_face]
+        
+        face = faces[0]
+        embedding = face.normed_embedding
+        
+        if not validate_embedding(embedding):
+            print("✗ Error: Invalid face embedding extracted")
+            return False
+        
+        # Store the embedding
+        self.embeddings_db[student_id] = embedding
+        save_embeddings(self.embeddings_db, EMBEDDINGS_FILE)
+        
+        print(f"✓ Successfully enrolled {student_id} from photo")
+        print(f"✓ Embedding extracted and stored")
+        
+        # Display the detected face for confirmation
+        bbox = face.bbox.astype(int)
+        display_frame = frame.copy()
+        cv2.rectangle(display_frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
+        cv2.putText(display_frame, student_id, (bbox[0], bbox[1] - 10),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+        
+        # Resize if too large for display
+        max_dimension = 800
+        height, width = display_frame.shape[:2]
+        if max(height, width) > max_dimension:
+            scale = max_dimension / max(height, width)
+            new_width = int(width * scale)
+            new_height = int(height * scale)
+            display_frame = cv2.resize(display_frame, (new_width, new_height))
+        
+        cv2.imshow('Enrolled Face - Press any key to close', display_frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        
+        return True
     
     def capture_face_samples(self, student_id: str) -> bool:
         """
@@ -69,7 +159,7 @@ class StudentEnrollment:
         
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
-            print("Error: Could not open webcam")
+            print("✗ Error: Could not open webcam")
             return False
         
         # Set camera resolution for better quality
@@ -84,11 +174,11 @@ class StudentEnrollment:
         while samples_captured < self.num_samples:
             ret, frame = cap.read()
             if not ret:
-                print("Error: Could not read frame")
+                print("✗ Error: Could not read frame")
                 break
             
-            # Detect faces
-            faces = self.app.get(frame)
+            # Detect faces - allow detection of multiple faces to warn user
+            faces = self.app.get(frame, max_num=10)
             
             # Display frame
             display_frame = frame.copy()
@@ -195,19 +285,38 @@ def main():
     print("EXAM PROCTORING SYSTEM - STUDENT ENROLLMENT")
     print("="*60)
     
+    # Check for GPU availability
+    device = 'cpu'
+    try:
+        import onnxruntime as ort
+        available_providers = ort.get_available_providers()
+        
+        if 'CUDAExecutionProvider' in available_providers:
+            print("\nGPU (CUDA) detected!")
+            use_gpu = input("Use GPU acceleration? (y/n): ").strip().lower()
+            if use_gpu == 'y':
+                device = 'cuda'
+                print("GPU acceleration enabled")
+        else:
+            print("\nGPU not available. Using CPU.")
+            print("   To enable GPU: pip install onnxruntime-gpu")
+    except ImportError:
+        print("\nUsing CPU processing")
+    
     # Initialize enrollment system
-    enroller = StudentEnrollment(num_samples=10, device='cpu')
+    enroller = StudentEnrollment(num_samples=10, device=device)
     
     while True:
         print("\n" + "="*60)
         print("MENU:")
-        print("1. Enroll new student")
-        print("2. List enrolled students")
-        print("3. Remove student")
-        print("4. Exit")
+        print("1. Enroll from photo (single portrait)")
+        print("2. Enroll from webcam (multiple samples)")
+        print("3. List enrolled students")
+        print("4. Remove student")
+        print("5. Exit")
         print("="*60)
         
-        choice = input("Enter your choice (1-4): ").strip()
+        choice = input("Enter your choice (1-5): ").strip()
         
         if choice == '1':
             student_id = input("\nEnter student ID (e.g., STU001): ").strip()
@@ -220,21 +329,38 @@ def main():
                 if overwrite != 'y':
                     continue
             
-            enroller.capture_face_samples(student_id)
+            photo_path = input("Enter path to portrait photo (or drag & drop file): ").strip()
+            # Remove quotes if user drags and drops file
+            photo_path = photo_path.strip('"').strip("'")
+            
+            enroller.enroll_from_photo(student_id, photo_path)
         
         elif choice == '2':
-            enroller.list_enrolled_students()
+            student_id = input("\nEnter student ID (e.g., STU001): ").strip()
+            if not student_id:
+                print("Invalid student ID")
+                continue
+            
+            if student_id in enroller.embeddings_db:
+                overwrite = input(f"Student {student_id} already enrolled. Overwrite? (y/n): ").strip().lower()
+                if overwrite != 'y':
+                    continue
+            
+            enroller.capture_face_samples(student_id)
         
         elif choice == '3':
+            enroller.list_enrolled_students()
+        
+        elif choice == '4':
             student_id = input("\nEnter student ID to remove: ").strip()
             enroller.remove_student(student_id)
         
-        elif choice == '4':
+        elif choice == '5':
             print("\nExiting enrollment system...")
             break
         
         else:
-            print("Invalid choice. Please enter 1-4.")
+            print("Invalid choice. Please enter 1-5.")
 
 
 if __name__ == "__main__":
