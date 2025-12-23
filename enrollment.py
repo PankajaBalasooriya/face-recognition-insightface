@@ -35,18 +35,18 @@ class StudentEnrollment:
         if device == 'cuda':
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
             ctx_id = 0
-            print("🚀 Using GPU acceleration (CUDA)")
+            print("Using GPU acceleration (CUDA)")
         else:
             providers = ['CPUExecutionProvider']
             ctx_id = -1
-            print("⚙️  Using CPU processing")
+            print("Using CPU processing")
         
         self.app = FaceAnalysis(
             name='buffalo_l',  # High-accuracy model
             providers=providers
         )
         self.app.prepare(ctx_id=ctx_id, det_size=(640, 640))
-        print("✓ Model loaded successfully")
+        print("Model loaded successfully")
         
         # Load existing embeddings
         self.embeddings_db = load_embeddings(EMBEDDINGS_FILE)
@@ -69,7 +69,7 @@ class StudentEnrollment:
         
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
-            print("✗ Error: Could not open webcam")
+            print("Error: Could not open webcam")
             return False
         
         # Set camera resolution for better quality
@@ -84,7 +84,7 @@ class StudentEnrollment:
         while samples_captured < self.num_samples:
             ret, frame = cap.read()
             if not ret:
-                print("✗ Error: Could not read frame")
+                print("Error: Could not read frame")
                 break
             
             # Detect faces
@@ -121,7 +121,7 @@ class StudentEnrollment:
                         embeddings_list.append(embedding)
                         samples_captured += 1
                         last_capture_time = current_time
-                        print(f"✓ Sample {samples_captured}/{self.num_samples} captured")
+                        print(f"Sample {samples_captured}/{self.num_samples} captured")
                 
                 # Display progress
                 progress_text = f"Samples: {samples_captured}/{self.num_samples}"
@@ -136,7 +136,7 @@ class StudentEnrollment:
             
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
-                print("\n✗ Enrollment cancelled")
+                print("\nEnrollment cancelled")
                 cap.release()
                 cv2.destroyAllWindows()
                 return False
@@ -150,11 +150,11 @@ class StudentEnrollment:
             self.embeddings_db[student_id] = avg_embedding
             save_embeddings(self.embeddings_db, EMBEDDINGS_FILE)
             
-            print(f"\n✓ Successfully enrolled {student_id}")
-            print(f"✓ {self.num_samples} samples averaged into robust embedding")
+            print(f"\nSuccessfully enrolled {student_id}")
+            print(f"{self.num_samples} samples averaged into robust embedding")
             return True
         else:
-            print(f"\n✗ Enrollment failed: Only captured {len(embeddings_list)} samples")
+            print(f"\nEnrollment failed: Only captured {len(embeddings_list)} samples")
             return False
     
     def list_enrolled_students(self):
@@ -182,10 +182,10 @@ class StudentEnrollment:
         if student_id in self.embeddings_db:
             del self.embeddings_db[student_id]
             save_embeddings(self.embeddings_db, EMBEDDINGS_FILE)
-            print(f"✓ Removed {student_id} from database")
+            print(f"Removed {student_id} from database")
             return True
         else:
-            print(f"✗ Student {student_id} not found in database")
+            print(f"Student {student_id} not found in database")
             return False
 
 
@@ -212,7 +212,7 @@ def main():
         if choice == '1':
             student_id = input("\nEnter student ID (e.g., STU001): ").strip()
             if not student_id:
-                print("✗ Invalid student ID")
+                print("Invalid student ID")
                 continue
             
             if student_id in enroller.embeddings_db:
@@ -234,7 +234,7 @@ def main():
             break
         
         else:
-            print("✗ Invalid choice. Please enter 1-4.")
+            print("Invalid choice. Please enter 1-4.")
 
 
 if __name__ == "__main__":

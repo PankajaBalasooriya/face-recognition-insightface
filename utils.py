@@ -80,7 +80,7 @@ def save_embeddings(embeddings: Dict[str, np.ndarray], filepath: str = EMBEDDING
     """
     with open(filepath, 'wb') as f:
         pickle.dump(embeddings, f)
-    print(f"✓ Embeddings saved to {filepath}")
+    print(f"Embeddings saved to {filepath}")
 
 
 def load_embeddings(filepath: str = EMBEDDINGS_FILE) -> Dict[str, np.ndarray]:
@@ -94,13 +94,13 @@ def load_embeddings(filepath: str = EMBEDDINGS_FILE) -> Dict[str, np.ndarray]:
         Dictionary of {student_id: embedding}
     """
     if not os.path.exists(filepath):
-        print(f"⚠ No embeddings file found at {filepath}")
+        print(f"No embeddings file found at {filepath}")
         return {}
     
     with open(filepath, 'rb') as f:
         embeddings = pickle.load(f)
     
-    print(f"✓ Loaded {len(embeddings)} student embeddings from {filepath}")
+    print(f"Loaded {len(embeddings)} student embeddings from {filepath}")
     return embeddings
 
 

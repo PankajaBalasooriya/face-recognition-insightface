@@ -42,24 +42,32 @@ class FaceRecognitionProctor:
         if device == 'cuda':
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
             ctx_id = 0
-            print("🚀 Using GPU acceleration (CUDA)")
+            print("Using GPU acceleration (CUDA)")
         else:
             providers = ['CPUExecutionProvider']
             ctx_id = -1
-            print("⚙️  Using CPU processing")
+            print("Using CPU processing")
         
         self.app = FaceAnalysis(
             name='buffalo_l',
             providers=providers
         )
+        # Adjust detection parameters for better multiple face detection
         self.app.prepare(ctx_id=ctx_id, det_size=(640, 640))
-        print("✓ Model loaded successfully")
+        
+        # Set detection threshold lower to catch more faces
+        # This helps detect faces at various angles and distances
+        for model in self.app.models.values():
+            if hasattr(model, 'det_thresh'):
+                model.det_thresh = 0.3  # Lower threshold for more detections
+        
+        print("Model loaded successfully")
         
         # Load enrolled students
         self.embeddings_db = load_embeddings(EMBEDDINGS_FILE)
         
         if not self.embeddings_db:
-            print("\n⚠ WARNING: No enrolled students found!")
+            print("\nWARNING: No enrolled students found!")
             print("Please run enrollment.py first to enroll students.\n")
         
         # Performance metrics
@@ -77,7 +85,8 @@ class FaceRecognitionProctor:
             Tuple of (status, face_data_list)
             face_data_list contains dicts with bbox, student_id, similarity
         """
-        faces = self.app.get(frame)
+        # Detect faces with max_num parameter to find multiple faces
+        faces = self.app.get(frame, max_num=10)  # Allow up to 10 faces
         face_data_list = []
         
         if len(faces) == 0:
@@ -208,7 +217,7 @@ class FaceRecognitionProctor:
         
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
-            print("✗ Error: Could not open webcam")
+            print("Error: Could not open webcam")
             return
         
         # Set camera resolution
@@ -219,13 +228,13 @@ class FaceRecognitionProctor:
         frame_skip = 0  # Process every frame for real-time proctoring
         frame_count = 0
         
-        print("✓ Camera opened. Starting verification...")
+        print("Camera opened. Starting verification...")
         print("Press 'q' to quit\n")
         
         while True:
             ret, frame = cap.read()
             if not ret:
-                print("✗ Error: Could not read frame")
+                print("Error: Could not read frame")
                 break
             
             frame_count += 1
@@ -236,13 +245,13 @@ class FaceRecognitionProctor:
                 
                 # Log important events
                 if status == self.STATUS_MULTIPLE_FACES:
-                    print(f"⚠ [{time.strftime('%H:%M:%S')}] ALERT: Multiple faces detected!")
+                    print(f"[{time.strftime('%H:%M:%S')}] ALERT: Multiple faces detected!")
                 elif status == self.STATUS_UNKNOWN:
-                    print(f"⚠ [{time.strftime('%H:%M:%S')}] ALERT: Unknown person detected!")
+                    print(f"[{time.strftime('%H:%M:%S')}] ALERT: Unknown person detected!")
                 elif status == self.STATUS_VERIFIED and face_data_list:
                     student_id = face_data_list[0]['student_id']
                     if frame_count % 30 == 0:  # Log every 30 frames to avoid spam
-                        print(f"✓ [{time.strftime('%H:%M:%S')}] Verified: {student_id}")
+                        print(f"[{time.strftime('%H:%M:%S')}] Verified: {student_id}")
             
             # Draw results
             display_frame = self.draw_results(frame, status, face_data_list)
@@ -264,7 +273,7 @@ class FaceRecognitionProctor:
             elif key == ord('r'):
                 print("\nReloading student database...")
                 self.embeddings_db = load_embeddings(EMBEDDINGS_FILE)
-                print(f"✓ Loaded {len(self.embeddings_db)} students")
+                print(f"Loaded {len(self.embeddings_db)} students")
         
         cap.release()
         cv2.destroyAllWindows()
@@ -295,9 +304,9 @@ def main():
         try:
             threshold = float(input("Enter threshold (0.0-1.0, lower=stricter): ").strip())
             threshold = max(0.0, min(1.0, threshold))
-            print(f"✓ Threshold set to {threshold}")
+            print(f"Threshold set to {threshold}")
         except ValueError:
-            print("✗ Invalid input. Using default threshold.")
+            print("Invalid input. Using default threshold.")
             threshold = DEFAULT_THRESHOLD
     
     # Check for GPU availability
@@ -306,16 +315,16 @@ def main():
         available_providers = ort.get_available_providers()
         
         if 'CUDAExecutionProvider' in available_providers:
-            print("\n✓ GPU (CUDA) detected!")
+            print("\nGPU (CUDA) detected!")
             use_gpu = input("Use GPU acceleration? (y/n): ").strip().lower()
             if use_gpu == 'y':
                 device = 'cuda'
-                print("🚀 GPU acceleration enabled")
+                print("GPU acceleration enabled")
         else:
-            print("\nℹ️  GPU not available. Using CPU.")
+            print("\nGPU not available. Using CPU.")
             print("   To enable GPU: pip install onnxruntime-gpu")
     except ImportError:
-        print("\nℹ️  Using CPU processing")
+        print("\nUsing CPU processing")
     
     # Initialize and run
     proctor = FaceRecognitionProctor(threshold=threshold, device=device)
